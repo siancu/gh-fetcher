@@ -19,6 +19,7 @@ cp .env.example .env
 | `GH_SRC_DIR` | Root folder for cloned repos | `~/src` |
 | `GH_USER` | Your GitHub username (needed for `--fork`) | — |
 | `GH_TOKEN` | GitHub personal access token (needed for `--fork`) | — |
+| `GH_SYNC_EXCLUDE` | Comma-separated folder names to skip during sync | — |
 
 ## Usage
 
@@ -45,6 +46,39 @@ cp .env.example .env
 # Fork to your account, clone your fork via SSH, add upstream remote
 ./gh-fetcher.py clone owner/repo --fork
 ```
+
+## Sync
+
+Pull all repos in your source folder. Forks are automatically synced with upstream.
+
+```bash
+# Sync everything
+./gh-fetcher.py sync
+
+# Exclude folders (adds to GH_SYNC_EXCLUDE)
+./gh-fetcher.py sync --exclude "archive,old projects"
+```
+
+### What sync does for each repo
+
+1. **Skips** repos with uncommitted changes (with a warning)
+2. **Pulls** from origin
+3. If the repo has an `upstream` remote (i.e. it's a fork):
+   - Fetches upstream
+   - Fast-forward merges `upstream/<branch>` into current branch
+   - Pushes the result to origin
+
+### Excluding folders
+
+Set `GH_SYNC_EXCLUDE` in `.env` to permanently exclude folders:
+
+```
+GH_SYNC_EXCLUDE=archive,old projects,experiments
+```
+
+Spaces in folder names work fine — entries are split on commas and trimmed.
+
+The `--exclude` flag adds to the list for a single run.
 
 ## How `--fork` works
 

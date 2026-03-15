@@ -61,9 +61,9 @@ def clone_url(owner: str, repo: str, ssh: bool) -> str:
     return f"https://github.com/{owner}/{repo}.git"
 
 
-def git(*args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+def git(*args: str, cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
-    if result.returncode != 0:
+    if check and result.returncode != 0:
         print(f"Error running: git {' '.join(args)}", file=sys.stderr)
         if result.stderr:
             print(result.stderr.strip(), file=sys.stderr)
@@ -113,6 +113,113 @@ def fork_repo(owner: str, repo: str, token: str) -> str:
     else:
         print(f"Error forking: {resp.status_code} {resp.text}", file=sys.stderr)
         sys.exit(1)
+
+
+def get_exclude_dirs() -> set[str]:
+    """Get excluded folder names from env var (comma-separated)."""
+    raw = os.environ.get("GH_SYNC_EXCLUDE", "")
+    if not raw:
+        return set()
+    return {name.strip() for name in raw.split(",") if name.strip()}
+
+
+def find_repos(src_dir: Path, exclude: set[str]) -> list[Path]:
+    """Find all git repos in src_dir/owner/repo structure."""
+    repos = []
+    for owner_dir in sorted(src_dir.iterdir()):
+        if not owner_dir.is_dir() or owner_dir.name.startswith("."):
+            continue
+        if owner_dir.name in exclude:
+            continue
+        for repo_dir in sorted(owner_dir.iterdir()):
+            if not repo_dir.is_dir() or repo_dir.name.startswith("."):
+                continue
+            if repo_dir.name in exclude:
+                continue
+            if (repo_dir / ".git").exists():
+                repos.append(repo_dir)
+    return repos
+
+
+def has_remote(name: str, cwd: Path) -> bool:
+    """Check if a git remote exists."""
+    result = git("remote", cwd=cwd, check=False)
+    return name in result.stdout.splitlines()
+
+
+def sync_repo(repo_dir: Path) -> None:
+    """Pull a repo and sync with upstream if it's a fork."""
+    rel = f"{repo_dir.parent.name}/{repo_dir.name}"
+
+    # Check for uncommitted changes
+    status = git("status", "--porcelain", cwd=repo_dir, check=False)
+    if status.stdout.strip():
+        print(f"  ⚠ {rel}: skipped (uncommitted changes)")
+        return
+
+    # Pull origin
+    result = git("pull", cwd=repo_dir, check=False)
+    if result.returncode != 0:
+        print(f"  ✗ {rel}: pull failed")
+        if result.stderr:
+            print(f"    {result.stderr.strip()}")
+        return
+
+    # If it has an upstream remote, sync fork
+    if has_remote("upstream", repo_dir):
+        result = git("fetch", "upstream", cwd=repo_dir, check=False)
+        if result.returncode != 0:
+            print(f"  ✗ {rel}: upstream fetch failed")
+            if result.stderr:
+                print(f"    {result.stderr.strip()}")
+            return
+
+        # Get default branch
+        branch_result = git("rev-parse", "--abbrev-ref", "HEAD", cwd=repo_dir, check=False)
+        branch = branch_result.stdout.strip() or "main"
+
+        result = git("merge", f"upstream/{branch}", "--ff-only", cwd=repo_dir, check=False)
+        if result.returncode != 0:
+            print(f"  ⚠ {rel}: upstream merge needs manual resolution")
+            if result.stderr:
+                print(f"    {result.stderr.strip()}")
+            return
+
+        # Push the merged changes to origin
+        git("push", cwd=repo_dir, check=False)
+        print(f"  ✓ {rel} (fork synced with upstream)")
+    else:
+        print(f"  ✓ {rel}")
+
+
+def cmd_sync(args: argparse.Namespace) -> None:
+    src_dir = get_source_dir(args.dir)
+    exclude = get_exclude_dirs()
+
+    # Allow --exclude flag to add more
+    if args.exclude:
+        for name in args.exclude.split(","):
+            name = name.strip()
+            if name:
+                exclude.add(name)
+
+    if not src_dir.exists():
+        print(f"Error: Source directory {src_dir} does not exist.", file=sys.stderr)
+        sys.exit(1)
+
+    repos = find_repos(src_dir, exclude)
+
+    if not repos:
+        print(f"No repositories found in {src_dir}")
+        return
+
+    print(f"Syncing {len(repos)} repos in {src_dir}...")
+    if exclude:
+        print(f"  Excluding: {', '.join(sorted(exclude))}")
+    print()
+
+    for repo_dir in repos:
+        sync_repo(repo_dir)
 
 
 def cmd_clone(args: argparse.Namespace) -> None:
@@ -183,10 +290,16 @@ def main() -> None:
     clone_parser.add_argument("--ssh", action="store_true", help="Clone via SSH instead of HTTPS")
     clone_parser.add_argument("--fork", action="store_true", help="Fork to your account first, clone via SSH, add upstream")
 
+    # sync
+    sync_parser = subparsers.add_parser("sync", help="Pull all repos (and sync forks with upstream)")
+    sync_parser.add_argument("--exclude", help="Comma-separated folder names to exclude (adds to GH_SYNC_EXCLUDE)")
+
     args = parser.parse_args()
 
     if args.command == "clone":
         cmd_clone(args)
+    elif args.command == "sync":
+        cmd_sync(args)
 
 
 if __name__ == "__main__":
