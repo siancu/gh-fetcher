@@ -118,7 +118,9 @@ def fork_repo(owner: str, repo: str, token: str) -> str:
 def cmd_clone(args: argparse.Namespace) -> None:
     owner, repo = parse_repo(args.repo)
     src_dir = get_source_dir(args.dir)
-    use_ssh = args.ssh
+    gh_user = get_gh_user()
+    # Auto-use SSH for own repos
+    use_ssh = args.ssh or (gh_user and owner == gh_user)
     do_fork = args.fork
 
     if do_fork:

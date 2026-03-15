@@ -39,6 +39,9 @@ cp .env.example .env
 # If the repo already exists locally, it pulls instead
 ./gh-fetcher.py clone owner/repo
 
+# Your own repos automatically clone via SSH (based on GH_USER)
+./gh-fetcher.py clone yourname/repo
+
 # Fork to your account, clone your fork via SSH, add upstream remote
 ./gh-fetcher.py clone owner/repo --fork
 ```
