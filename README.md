@@ -1,6 +1,6 @@
 # gh-fetcher
 
-Clone and manage GitHub repositories in a structured source folder (`~/src/owner/repo`).
+Clone and manage GitHub/GitLab repositories in a structured source folder (`~/src/owner/repo` or `~/src/group/subgroup/project`).
 
 ## Setup
 
@@ -19,44 +19,65 @@ cp .env.example .env
 | `GH_SRC_DIR` | Root folder for cloned repos | `~/src` |
 | `GH_USER` | Your GitHub username (needed for `--fork`) | — |
 | `GH_TOKEN` | GitHub personal access token (needed for `--fork`) | — |
+| `GITLAB_HOST` | Self-hosted GitLab host for GitLab SSH clones | — |
 | `GH_SYNC_EXCLUDE` | Comma-separated folder names to skip during sync | — |
 
 ## Usage
 
+### GitHub
+
 ```bash
 # Clone a repo (HTTPS) into ~/src/owner/repo
-./gh-fetcher.py clone owner/repo
+./gh-fetcher.py github clone owner/repo
 
 # Clone via SSH
-./gh-fetcher.py clone owner/repo --ssh
+./gh-fetcher.py github clone owner/repo --ssh
 
 # Override source directory
-./gh-fetcher.py --dir ~/code clone owner/repo
+./gh-fetcher.py --dir ~/code github clone owner/repo
 
 # Accepts full URLs
-./gh-fetcher.py clone https://github.com/owner/repo
-./gh-fetcher.py clone git@github.com:owner/repo.git
+./gh-fetcher.py github clone https://github.com/owner/repo
+./gh-fetcher.py github clone git@github.com:owner/repo.git
 
 # If the repo already exists locally, it pulls instead
-./gh-fetcher.py clone owner/repo
+./gh-fetcher.py github clone owner/repo
 
 # Your own repos automatically clone via SSH (based on GH_USER)
-./gh-fetcher.py clone yourname/repo
+./gh-fetcher.py github clone yourname/repo
 
 # Fork to your account, clone your fork via SSH, add upstream remote
-./gh-fetcher.py clone owner/repo --fork
+./gh-fetcher.py github clone owner/repo --fork
+```
+
+### GitLab
+
+GitLab clones always use SSH and require `GITLAB_HOST`.
+
+```bash
+GITLAB_HOST=gitlab.example.com
+
+# Clone into ~/src/group/subgroup/project
+./gh-fetcher.py gitlab clone group/subgroup/project
+
+# Full self-hosted GitLab URLs also work
+./gh-fetcher.py gitlab clone https://gitlab.example.com/group/subgroup/project
+./gh-fetcher.py gitlab clone git@gitlab.example.com:group/subgroup/project.git
 ```
 
 ## Sync
 
-Pull all repos in your source folder. Forks are automatically synced with upstream.
+Pull repos for the selected provider in your source folder. GitHub forks are automatically synced with upstream.
 
 ```bash
-# Sync everything
-./gh-fetcher.py sync
+# Sync GitHub repos
+./gh-fetcher.py github sync
+
+# Sync GitLab repos
+./gh-fetcher.py gitlab sync
 
 # Exclude folders (adds to GH_SYNC_EXCLUDE)
-./gh-fetcher.py sync --exclude "archive,old projects"
+./gh-fetcher.py github sync --exclude "archive,old projects"
 ```
 
 ### What sync does for each repo
